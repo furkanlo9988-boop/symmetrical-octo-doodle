@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>Göz kamaştırıyorsun</title>
+    <style>
+        body { margin: 0; overflow: hidden; background: #fdfbfb; font-family: 'Segoe UI', sans-serif; touch-action: none; }
+        canvas { display: block; background: linear-gradient(180deg, #f5f7fa 0%, #c3cfe2 100%); }
+
+        #ui {
+            position: absolute; top: 40px; left: 0; width: 100%;
+            text-align: center; color: #5d67e8; font-size: 24px; font-weight: bold;
+            pointer-events: none; z-index: 5;
+        }
+
+        #msg {
+            position: absolute; inset: 0; display: none;
+            background: rgba(255,255,255,0.92); color: #5d67e8;
+            align-items: center; justify-content: center; font-size: 26px;
+            flex-direction: column; text-align: center; z-index: 10;
+        }
+
+        #compliment-container {
+            position: absolute; top: 40%; width: 100%; height: 80px;
+            overflow: hidden; pointer-events: none; z-index: 8;
+        }
+        .compliment-text {
+            position: absolute; white-space: nowrap; left: 100%;
+            font-size: 34px; font-weight: bold; color: #ff4081;
+            text-shadow: 2px 2px 8px rgba(255,64,129,0.2);
+            font-style: italic;
+            transition: none;
+        }
+
+        .restart-btn {
+            margin-top: 25px; padding: 15px 40px; border: none;
+            background: #5d67e8; color: white; border-radius: 50px;
+            font-size: 18px; font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+
+<div id="ui">PUAN: <span id="score">0</span></div>
+<div id="compliment-container"></div>
+
+<div id="msg" onclick="resetGame()">
+    <div style="font-weight: bold;">Hata yapabilirsin sorun değil seninle gurur duyuyorm! 🌸</div>
+    <button class="restart-btn">Tekrar Başla</button>
+</div>
+<canvas id="game"></canvas>
+
+<script>
+const canvas = document.getElementById("game");
+const ctx = canvas.getContext("2d");
+const scoreEl = document.getElementById("score");
+const msgEl = document.getElementById("msg");
+const compContainer = document.getElementById("compliment-container");
+
+let w, h, laneW, player, obstacles, score, gameActive, speed;
+let lastMilestone = 0;
+
+const compliments = [
+    "Mükemmel gidiyorsun abla! ✨", "Ablam bir numara! 💖", "Çok zarif oynuyorsun 🌸",
+    "Süpersin abla! 🌟", "Rekor senin olsun! 🏆", "Göz kamaştırıyorsun! 💎",
+    "Efsanesin sen! 🔥", "Harika bir stil! 💅", "İnanılmaz yetenek! 🎈",
+    "Böyle devam et prenses! 👑", "Dünyanın en iyi oyuncusu! 🌍"
+];
+
+const initialSpeed = 2.2;
+const acceleration = 0.0001;
+
+function init() {
+    w = canvas.width = window.innerWidth;
+    h = canvas.height = window.innerHeight;
+    laneW = w / 3;
+    player = { lane: 1, targetX: laneW + laneW/2, x: laneW + laneW/2, y: h - 160, r: 22 };
+    obstacles = [];
+    score = 0;
+    lastMilestone = 0;
+    speed = initialSpeed;
+    gameActive = true;
+    msgEl.style.display = "none";
+    compContainer.innerHTML = "";
+}
+
+let touchStartX = 0;
+window.addEventListener("touchstart", e => touchStartX = e.touches[0].clientX);
+window.addEventListener("touchend", e => {
+    let diff = e.changedTouches[0].clientX - touchStartX;
+    if (Math.abs(diff) > 25) {
+        if (diff > 0 && player.lane < 2) player.lane++;
+        else if (diff < 0 && player.lane > 0) player.lane--;
+    }
+});
+
+function showCompliment() {
+    const textDiv = document.createElement("div");
+    textDiv.className = "compliment-text";
+    textDiv.innerText = compliments[Math.floor(Math.random() * compliments.length)];
+    compContainer.appendChild(textDiv);
+
+    let pos = w;
+    function animate() {
+        if (!gameActive) { textDiv.remove(); return; }
+        pos -= 1.8; // HIZI DÜŞÜRDÜM: Mesajlar artık çok daha yavaş akıyor
+        textDiv.style.left = pos + "px";
+
+        if (pos > -800) {
+            requestAnimationFrame(animate);
+        } else {
+            textDiv.remove();
+        }
+    }
+    animate();
+}
+
+function spawnObstacle() {
+    if (Math.random() < 0.0075) {
+        let lane = Math.floor(Math.random() * 3);
+        const lastObs = obstacles[obstacles.length - 1];
+        if (!lastObs || lastObs.y > 450) {
+            obstacles.push({
+                x: lane * laneW + laneW / 2,
+                y: -100, w: laneW * 0.65, h: 40, color: "#9da5ff"
+            });
+        }
+    }
+}
+
+function update() {
+    if (!gameActive) return;
+    speed += acceleration;
+    score += 0.05;
+    let currentScore = Math.floor(score);
+    scoreEl.innerText = currentScore;
+
+    // ARTIK HER 50 PUANDA BİR TETİKLENİYOR
+    if (currentScore > 0 && currentScore % 50 === 0 && currentScore !== lastMilestone) {
+        lastMilestone = currentScore;
+        showCompliment();
+    }
+
+    player.targetX = player.lane * laneW + laneW / 2;
+    player.x += (player.targetX - player.x) * 0.12;
+
+    spawnObstacle();
+
+    obstacles.forEach((obs, index) => {
+        obs.y += speed;
+        let dx = Math.abs(obs.x - player.x);
+        let dy = Math.abs((obs.y + obs.h/2) - player.y);
+        if (dx < (obs.w/2 + player.r - 18) && dy < (obs.h/2 + player.r - 18)) {
+            gameActive = false;
+            msgEl.style.display = "flex";
+        }
+        if (obs.y > h) obstacles.splice(index, 1);
+    });
+}
+
+function draw() {
+    ctx.clearRect(0,0,w,h);
+    ctx.strokeStyle = "rgba(93,103,232,0.1)";
+    ctx.lineWidth = 4;
+    for (let i = 1; i < 3; i++) {
+        ctx.beginPath(); ctx.moveTo(i * laneW, 0); ctx.lineTo(i * laneW, h); ctx.stroke();
+    }
+    obstacles.forEach(obs => {
+        ctx.fillStyle = obs.color;
+        ctx.beginPath();
+        if(ctx.roundRect) ctx.roundRect(obs.x - obs.w / 2, obs.y, obs.w, obs.h, [12]);
+        else ctx.fillRect(obs.x - obs.w / 2, obs.y, obs.w, obs.h);
+        ctx.fill();
+    });
+    ctx.shadowBlur = 20; ctx.shadowColor = "rgba(93,103,232,0.5)";
+    ctx.fillStyle = "#5d67e8"; ctx.beginPath();
+    ctx.arc(player.x, player.y, player.r, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = "white"; ctx.lineWidth = 5; ctx.stroke();
+    ctx.shadowBlur = 0;
+}
+
+function resetGame() { init(); }
+function loop() { update(); draw(); requestAnimationFrame(loop); }
+
+init();
+loop();
+window.addEventListener("resize", init);
+</script>
+</body>
+</html>
